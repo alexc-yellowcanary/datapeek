@@ -1,0 +1,6 @@
+-e .
+coverage
+mypy
+pandas-stubs
+pyright
+pytest
