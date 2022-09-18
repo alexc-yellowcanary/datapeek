@@ -19,8 +19,8 @@ from textual.widgets import Static
 
 from pandas_tui.df import pd_mixed_table
 
-PRIMARY_COLOUR = 'sandy_brown'
-ACCENT_COLOUR = 'grey23'
+PRIMARY_COLOUR = "sandy_brown"
+ACCENT_COLOUR = "grey23"
 
 
 index_style = Style(italic=True, color=PRIMARY_COLOUR)
@@ -34,9 +34,9 @@ class DFFooter(Footer):
         text = Text(
             style=footer_style,
             no_wrap=True,
-            overflow='ellipsis',
-            justify='left',
-            end='',
+            overflow="ellipsis",
+            justify="left",
+            end="",
         )
         for binding in self.app.bindings.shown_keys:
             key_display = (
@@ -46,11 +46,11 @@ class DFFooter(Footer):
             )
             hovered = self.highlight_key == binding.key
             key_text = Text.assemble(
-                (f' {key_display} ', 'reverse' if hovered else 'default on default'),
-                f' {binding.description} ',
+                (f" {key_display} ", "reverse" if hovered else "default on default"),
+                f" {binding.description} ",
                 meta={
-                    '@click': f"app.press('{binding.key}')",
-                    'key': binding.key,
+                    "@click": f"app.press('{binding.key}')",
+                    "key": binding.key,
                 },
             )
             text.append_text(key_text)
@@ -65,7 +65,7 @@ def render_df_as_table(df: pd.DataFrame) -> Table:
     table = Table(
         *cols,
         header_style=title_style,
-        row_styles=['dim', ''],
+        row_styles=["dim", ""],
         highlight=True,
         box=box.ROUNDED,
     )
@@ -81,14 +81,14 @@ def render_index_as_table(df: pd.DataFrame) -> Table:
     if idx.name:
         idx_colname = Pretty(idx.name)
     else:
-        idx_colname = ' '
+        idx_colname = " "
 
-    col = Column(header=idx_colname, justify='left', no_wrap=True)
+    col = Column(header=idx_colname, justify="left", no_wrap=True)
 
     table = Table(
         col,
         box=box.SIMPLE,
-        row_styles=['dim', ''],
+        row_styles=["dim", ""],
     )
 
     for i in idx:
@@ -108,11 +108,11 @@ class DFScrollView(ScrollView):
 
     def page_left(self) -> None:
         self.target_x -= self.size.width - 2
-        self.animate('x', self.target_x, speed=self._speed, easing='out_cubic')
+        self.animate("x", self.target_x, speed=self._speed, easing="out_cubic")
 
     def page_right(self) -> None:
         self.target_x += self.size.width - 2
-        self.animate('x', self.target_x, speed=self._speed, easing='out_cubic')
+        self.animate("x", self.target_x, speed=self._speed, easing="out_cubic")
 
     async def update(
         self,
@@ -130,11 +130,11 @@ class DataFrameViewer(App):
     top_row: int
 
     async def on_load(self, event: events.Load) -> None:
-        await self.bind('q', 'quit', 'Quit')
-        await self.bind('j', 'down', 'Page Down')
-        await self.bind('k', 'up', 'Page Up')
-        await self.bind('h', 'left', 'Left')
-        await self.bind('l', 'right', 'Right')
+        await self.bind("q", "quit", "Quit")
+        await self.bind("j", "down", "Page Down")
+        await self.bind("k", "up", "Page Up")
+        await self.bind("h", "left", "Left")
+        await self.bind("l", "right", "Right")
 
     async def on_mount(self, event: events.Mount) -> None:
         """Create and dock the widgets."""
@@ -147,11 +147,11 @@ class DataFrameViewer(App):
         )
 
         # header / footer / dock
-        await self.view.dock(Header(style=title_style), edge='top')
-        await self.view.dock(DFFooter(), edge='bottom')
+        await self.view.dock(Header(style=title_style), edge="top")
+        await self.view.dock(DFFooter(), edge="bottom")
 
-        await self.view.dock(index_view, edge='left', size=8)
-        await self.view.dock(body, edge='right')
+        await self.view.dock(index_view, edge="left", size=8)
+        await self.view.dock(body, edge="right")
 
         async def add_content() -> None:
             await self.render_table()
@@ -199,4 +199,4 @@ class DataFrameViewer(App):
 
 
 def main() -> None:
-    DataFrameViewer.run(title='DataFrame Viewer', log='textual.log')
+    DataFrameViewer.run(title="DataFrame Viewer", log="textual.log")
