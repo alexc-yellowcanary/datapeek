@@ -151,7 +151,7 @@ def pd_string_series(num_rows: int, provider_name: str | None = None) -> pd.Seri
         "phone_number": fake.phone_number,
         "name": fake.name,
         "multi_string_smol": lambda: multi_line_string(max_lines=2),
-        "multi_string_large": lambda: multi_line_string(max_lines=6),
+        "multi_string_large": lambda: multi_line_string(max_lines=3),
     }
 
     if provider_name is None:
