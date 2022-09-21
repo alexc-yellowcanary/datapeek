@@ -2,5 +2,6 @@
 coverage
 mypy
 pandas-stubs
+pre-commit
 pyright
 pytest

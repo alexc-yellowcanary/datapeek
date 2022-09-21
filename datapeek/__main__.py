@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pandas_tui.main import main
+from datapeek.main import main
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())
