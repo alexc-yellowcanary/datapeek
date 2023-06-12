@@ -1,313 +1,167 @@
 from __future__ import annotations
-
+import sys
 from pathlib import Path
-from typing import Any
-from typing import Iterable
-
-import click
 import pandas as pd
-from rich import box
-from rich._loop import loop_first_last
-from rich.console import Console
-from rich.console import RenderableType
+from rich.segment import Segment
 from rich.style import Style
-from rich.table import Column
-from rich.table import Table
-from rich.text import Text
-from textual import events
-from textual.app import App
-from textual.widgets import Footer
-from textual.widgets import Header
-from textual.widgets import ScrollView
-from textual.widgets import Static
 
-from datapeek.df import pd_mixed_table
+from textual.app import App, ComposeResult
+from textual.containers import Container
+from textual.widgets import Header, Footer, DataTable
+from textual.reactive import reactive
 
-PRIMARY_COLOUR = "sandy_brown"
-ACCENT_COLOUR = "grey23"
-
-index_style = Style(italic=True, color=PRIMARY_COLOUR)
-title_style = Style(bold=True, color=PRIMARY_COLOUR)
-footer_style = Style(color=PRIMARY_COLOUR, bgcolor=ACCENT_COLOUR)
-
-
-class DFFooter(Footer):
-    def make_key_text(self) -> Text:
-        """Create text containing all the keys."""
-        text = Text(
-            style=footer_style,
-            no_wrap=True,
-            overflow="ellipsis",
-            justify="left",
-            end="",
-        )
-        for binding in self.app.bindings.shown_keys:
-            key_display = (
-                binding.key.upper()
-                if binding.key_display is None
-                else binding.key_display
-            )
-            hovered = self.highlight_key == binding.key
-            key_text = Text.assemble(
-                (f" {key_display} ", "reverse" if hovered else "default on default"),
-                f" {binding.description} ",
-                meta={
-                    "@click": f"app.press('{binding.key}')",
-                    "key": binding.key,
-                },
-            )
-            text.append_text(key_text)
-        return text
+ROWS = [
+    ("lane", "swimmer", "country", "time"),
+    (4, "Joseph Schooling", "Singapore", 50.39),
+    (2, "Michael Phelps", "United States", 51.14),
+    (5, "Chad le Clos", "South Africa", 51.14),
+    (6, "László Cseh", "Hungary", 51.14),
+    (3, "Li Zhuhao", "China", 51.26),
+    (8, "Mehdy Metella", "France", 51.58),
+    (7, "Tom Shields", "United States", 51.73),
+    (1, "Aleksandr Sadovnikov", "Russia", 51.84),
+    (10, "Darren Burns", "Scotland", 51.84),
+]
 
 
-def render_df_as_table(df: pd.DataFrame) -> Table:
-    def _make_col(col_name: Any) -> Column:
-        return Column(str(col_name), no_wrap=True, max_width=30)
+from typing import Callable
 
-    cols = map(_make_col, df.columns.values)
-    table = Table(
-        *cols,
-        header_style=title_style,
-        row_styles=["dim", ""],
-        # show_lines=True,
-        highlight=True,
-        box=box.ROUNDED,
-    )
-    add_df_rows(table, df)
+ERROR_RETURN_VALUE = 1
 
-    return table
+READERS: dict[str, Callable] = {
+    # excel extensions
+    ".xlsx": pd.read_excel,
+    ".xls":pd.read_excel, 
+    ".xlsm":pd.read_excel, 
+    ".xlsb":pd.read_excel, 
+    # csv extensions
+    ".csv": pd.read_csv,
+    ".tsv": pd.read_csv,
+    ".txt": pd.read_csv,
+    # parquet extensions
+    ".parquet": pd.read_parquet,
+    ".pqt": pd.read_parquet,
+    # pickle extensions
+    ".pickle": pd.read_pickle,
+    ".pkl": pd.read_pickle,
+}
 
-
-def render_index_as_table(df: pd.DataFrame, row_heights: list[int]) -> Table:
-
-    idx = df.index
-
-    if idx.name:
-        idx_colname = idx.name
-    else:
-        idx_colname = " "
-
-    index_col = Column(header=idx_colname, justify="left", no_wrap=True)
-
-    show_lines = True
-
-    table = Table(
-        index_col,
-        box=box.ROUNDED,
-        # show_lines=True,
-        row_styles=["dim", ""],
-    )
-
-    for i, row_height in zip(idx, row_heights[1:]):
-        idx_label = str(i) + "\n" * (row_height - show_lines)
-        table.add_row(*(idx_label,))
-
-    return table
+def get_reader_from_path(filepath: Path) -> Callable:
+    return READERS[filepath.suffix.lower()]
 
 
-def get_row_heights(table: Table, console: Console) -> list[int]:
-    """Returns list of heights (in lines) for all rows in the table (including
-    header and footer if they are displayed.
-    """
-    table_style = console.get_style(table.style or "")
-    border_style = table_style + console.get_style(table.border_style or "")
-
-    _all_column_cells = (
-        table._get_cells(console, column_index, column)
-        for column_index, column in enumerate(table.columns)
-    )
-
-    all_row_cells = list(zip(*_all_column_cells))
-
-    get_style = console.get_style
-    get_row_style = table.get_row_style
-    options = console.options
-    columns = table.columns
-
-    show_header = table.show_header
-    show_footer = table.show_footer
-
-    widths = table._calculate_column_widths(console, options)
-
-    row_heights = []
-    for row_idx, (is_first_col, is_last_col, row_cells) in enumerate(
-        loop_first_last(all_row_cells),
-    ):
-        header_row = is_first_col and show_header
-        footer_row = is_last_col and show_footer
-        row = (
-            table.rows[row_idx - show_header]
-            if (not header_row and not footer_row)
-            else None
-        )
-        max_height = 1
-        if header_row or footer_row:
-            row_style = Style.null()
-        else:
-            row_style = get_style(
-                get_row_style(console, row_idx - 1 if show_header else row_idx),
-            )
-        for width, cell, column in zip(widths, row_cells, columns):
-            render_options = options.update(
-                width=width,
-                justify=column.justify,
-                no_wrap=column.no_wrap,
-                overflow=column.overflow,
-                height=None,
-            )
-            lines = console.render_lines(
-                cell.renderable,
-                render_options,
-                style=get_style(cell.style) + row_style,
-            )
-            max_height = max(max_height, len(lines))
-
-        row_heights.append(max_height)
-
-    return row_heights
 
 
-def add_df_rows(table: Table, df: pd.DataFrame) -> None:
-    for _, row in df.iterrows():
-        table.add_row(*map(str, row.values))
+class PeekedData(DataTable):
+    def render_df(self, df: pd.DataFrame):
+        self.clear(columns=True)
+
+        self.add_columns('index', *df.columns.to_list())
+        for row_data in df.itertuples(name=None):
+            index = row_data[0]
+            values = row_data[1:]
+            self.add_row(index, *values)
+
+    def on_mount(self) -> None:
+        self.styles.height = "100%"
+        self.styles.width = "100%"
 
 
-class DFScrollView(ScrollView):
-    """Custom scroll view, with snappier horizontal scrolling"""
+class DataViewport(Container):
+    rows_in_view: int
 
-    _speed = 500
-
-    def page_left(self) -> None:
-        self.target_x -= int(self.size.width * 0.8)
-        self.animate("x", self.target_x, speed=self._speed, easing="out_cubic")
-
-    def page_right(self) -> None:
-        self.target_x += int(self.size.width * 0.8)
-        self.animate("x", self.target_x, speed=self._speed, easing="out_cubic")
-
-    async def update(
-        self,
-        renderable: RenderableType,
-        scroll_position: int = 0,
-    ) -> None:
-        await super().update(renderable)
-        self.x = scroll_position
-
-
-class DataFrameViewer(App):
-    """An example of a very simple Textual App"""
-
-    df: pd.DataFrame
-    top_row: int
-
-    def __init__(
-        self,
-        *args: Iterable[Any],
-        dataframe: pd.DataFrame,
-        **kwargs: dict[str, Any],
-    ) -> None:
+    def __init__(self, initial_rows: int, *args, **kwargs):
+        self.rows_in_view = initial_rows
         super().__init__(*args, **kwargs)
-        self.df = dataframe
 
-    async def on_load(self, event: events.Load) -> None:
-        await self.bind("q", "quit", "Quit")
-        await self.bind("j", "down", "Page Down")
-        await self.bind("k", "up", "Page Up")
-        await self.bind("h", "left", "Left")
-        await self.bind("l", "right", "Right")
 
-    async def on_mount(self, event: events.Mount) -> None:
-        """Create and dock the widgets + set initial static content."""
+    def compose(self) -> ComposeResult:
+        yield PeekedData(header_height=1, zebra_stripes=True)
 
-        self.top_row = 0
+    def on_mount(self) -> None:
+        self.styles.height = "1fr"
+        self.styles.width = "1fr"
 
-        self.body = body = DFScrollView(auto_width=True, fluid=False)
+    def on_size(self) -> None:
+        self.rows_in_view = self.size[1]
 
-        main_table = render_df_as_table(self.viewable)
-        row_heights = get_row_heights(main_table, self.body.console)
-        idx_view = render_index_as_table(self.viewable, row_heights)
-        self.index_view = index_view = Static(idx_view)
 
-        # header / footer / dock
-        await self.view.dock(Header(style=title_style), edge="top")
-        await self.view.dock(DFFooter(), edge="bottom")
+class Peek(App):
+    data: pd.DataFrame
+    filepath: str
 
-        await self.view.dock(index_view, edge="left", size=8)
-        await self.view.dock(body, edge="right")
+    top_row = reactive(0)
 
-        async def add_content() -> None:
-            await self.render_table()
+    BINDINGS = [
+        ("ctrl+d", "page_down", "Page Down"),
+        ("ctrl+u", "page_up", "Page Up"),
+    ]
 
-        await self.call_later(add_content)
+    def __init__(self, data: pd.DataFrame, filepath: Path | str, **kwargs):
+        self.data = data
+        self.filepath = str(filepath)
+        self.TITLE = str(self.filepath)
+        super().__init__(**kwargs)
 
     @property
-    def lines_in_view(self) -> int:
-        return self.body.console.height - 8
+    def table(self) -> PeekedData:
+        return self.query_one(PeekedData)
+
+    @property
+    def data_viewport(self) -> DataViewport:
+        return self.query_one(DataViewport)
 
     @property
     def viewable(self) -> pd.DataFrame:
         """The viewable rows in the dataframe"""
+        print(f"{self.data_viewport.size[1]=}")
+        return self.data.iloc[self.top_row : self.data_viewport.rows_in_view + self.top_row]
 
-        # first get dataframe, assuming we can show one row per-line
-        max_viewable_df = self.df.iloc[self.top_row : self.lines_in_view + self.top_row]
-
-        # now render it, to find out the actual row heights
-        rendered = render_df_as_table(max_viewable_df)
-        row_heights = get_row_heights(rendered, self.body.console)
-
-        if sum(row_heights) <= self.lines_in_view:
-            # return df if we can fit it in viewport
-            return max_viewable_df
-
-        # pick what rendered rows we can fit - ignore column header width
-        rendered_lines = 0
-        max_row_idx = 0
-        for row_idx, row_height in enumerate(row_heights[1:]):
-            if rendered_lines + row_height < self.lines_in_view:
-                max_row_idx = row_idx
-                rendered_lines += row_height
-            else:
-                break
-        return self.df.iloc[self.top_row : max_row_idx + self.top_row]
-
-    async def render_table(self, cols_to_shift: int = 0) -> None:
-        # get current horizontal scroll position
-        x = self.body.x
-
-        self.move_table_frame(cols_to_shift)
-
-        main_table = render_df_as_table(self.viewable)
-        row_heights = get_row_heights(main_table, self.body.console)
-        idx_view = render_index_as_table(self.viewable, row_heights)
-
-        await self.body.update(main_table, scroll_position=x)
-        await self.index_view.update(idx_view)
-
-    def move_table_frame(self, row_delta: int) -> None:
-        max_row = len(self.df) - self.lines_in_view
-
-        self.top_row = max(min(max_row, self.top_row + row_delta), 0)
-
-    async def action_down(self) -> None:
-        await self.render_table(cols_to_shift=len(self.viewable))
-
-    async def action_up(self) -> None:
-        await self.render_table(cols_to_shift=-len(self.viewable))
-
-    async def action_left(self) -> None:
-        self.body.page_left()
-
-    async def action_right(self) -> None:
-        self.body.page_right()
+    def watch_top_row(self, _: int) -> None:
+        self.table.render_df(self.viewable)
+ 
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Footer()
+        yield DataViewport(initial_rows=self.size[1]-4)
+ 
+    def on_mount(self) -> None:
+        self.table.render_df(df=self.viewable)
 
 
-@click.command()
-@click.argument("file")
-def main(file: str) -> None:
+    def action_page_down(self) -> None:
+        self.top_row = min(self.top_row + self.data_viewport.rows_in_view, len(self.data))
 
-    # TODO: hacky file handling/reading for now - fix later, etc
-    filepath = Path(file)
+    def action_page_up(self) -> None:
+        self.top_row = max(self.top_row - self.data_viewport.rows_in_view, 0)
 
-    df = pd.read_csv(filepath).round(3)
+def main() -> int:
+    try:
+        filepath = Path(sys.argv[1])
+    except IndexError:
+        print("requires a file")
+        return ERROR_RETURN_VALUE
 
-    DataFrameViewer.run(title="DataFrame Viewer", log="textual.log", dataframe=df)
+
+    if not filepath.exists():
+        print(f"{filepath} doesn't exist")
+        return ERROR_RETURN_VALUE
+
+    try:
+        reader = get_reader_from_path(filepath)
+    except KeyError:
+        print(f"filetype not supported")
+        return ERROR_RETURN_VALUE
+ 
+    print("loading data...")
+    data = reader(filepath)
+
+    app = Peek(data=data, filepath=filepath)
+    app.run()
+
+    return 0
+
+
+if __name__ == "__main__":
+    exit(main())
+

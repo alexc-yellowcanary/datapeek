@@ -5,3 +5,6 @@ pandas-stubs
 pre-commit
 pyright
 pytest
+textual[dev]
+ipdb
+pdbpp
