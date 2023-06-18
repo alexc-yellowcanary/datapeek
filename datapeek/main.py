@@ -11,6 +11,7 @@ from rich.style import Style
 from textual.app import App
 from textual.app import ComposeResult
 from textual.containers import Container
+from textual.coordinate import Coordinate
 from textual.reactive import reactive
 from textual.widgets import DataTable
 from textual.widgets import Footer
@@ -134,13 +135,24 @@ class Peek(App):
         self.table.render_df(df=self.viewable)
 
     def action_page_down(self) -> None:
+        prev_coords: Coordinate = self.table.cursor_coordinate
+
         self.top_row = min(
             self.top_row + self.data_viewport.rows_in_view,
             len(self.data),
         )
 
+        self.table.move_cursor(
+            row=prev_coords.row, column=prev_coords.column, animate=False,
+        )
+
     def action_page_up(self) -> None:
+        prev_coords: Coordinate = self.table.cursor_coordinate
+
         self.top_row = max(self.top_row - self.data_viewport.rows_in_view, 0)
+        self.table.move_cursor(
+            row=prev_coords.row, column=prev_coords.column, animate=False,
+        )
 
 
 def main() -> int:
