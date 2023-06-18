@@ -60,6 +60,13 @@ def get_reader_from_path(filepath: Path) -> DataPathReader:
 
 
 class PeekedData(DataTable):
+    BINDINGS = [
+        ("h", "cursor_left", "Cursor Left"),
+        ("l", "cursor_right", "Cursor Right"),
+        ("k", "cursor_up", "Cursor Up"),
+        ("j", "cursor_down", "Cursor Down"),
+    ]
+
     def render_df(self, df: pd.DataFrame) -> None:
         self.clear(columns=True)
 
