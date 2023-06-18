@@ -159,7 +159,7 @@ class Peek(App):
         with self.table.preserve_cursor_scroll_coords():
             self.top_row = min(
                 self.top_row + self.data_viewport.rows_in_view,
-                len(self.data),
+                len(self.data) - 1,
             )
 
     def action_page_up(self) -> None:
