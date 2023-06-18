@@ -76,6 +76,7 @@ class PeekedData(DataTable):
             index = row_data[0]
             values = row_data[1:]
             self.add_row(index, *values)
+            self.fixed_columns = 1
 
     def on_mount(self) -> None:
         self.styles.height = "100%"
