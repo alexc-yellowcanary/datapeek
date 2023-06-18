@@ -3,8 +3,8 @@ from __future__ import annotations
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable
 from typing import Generator
+from typing import Literal
 from typing import Protocol
 
 import pandas as pd
@@ -14,6 +14,7 @@ from textual.app import App
 from textual.app import ComposeResult
 from textual.containers import Container
 from textual.coordinate import Coordinate
+from textual.message import Message
 from textual.reactive import reactive
 from textual.widgets import DataTable
 from textual.widgets import Footer
@@ -98,6 +99,31 @@ class PeekedData(DataTable):
 
         self.scroll_to(x=scroll_coords.x, y=scroll_coords.y, animate=False)
 
+    class ScrollRequest(Message):
+        """Request the content to be scrolled"""
+
+        def __init__(self, direction: Literal["up", "down"]) -> None:
+            self.direction = direction
+            super().__init__()
+
+    def action_cursor_up(self) -> None:
+        cursor_coords = self.cursor_coordinate
+
+        if cursor_coords.row == 0:
+            self.post_message(self.ScrollRequest("up"))
+
+        else:
+            super().action_cursor_up()
+
+    def action_cursor_down(self) -> None:
+        cursor_coords = self.cursor_coordinate
+
+        if cursor_coords.row == self.row_count - 1:
+            self.post_message(self.ScrollRequest("down"))
+
+        else:
+            super().action_cursor_down()
+
 
 class DataViewport(Container):
     rows_in_view: int
@@ -172,6 +198,20 @@ class Peek(App):
     def action_page_up(self) -> None:
         with self.table.preserve_cursor_scroll_coords():
             self.top_row = max(self.top_row - self.data_viewport.rows_in_view, 0)
+
+    def on_peeked_data_scroll_request(self, scroll_request: PeekedData.ScrollRequest) -> None:
+        """Page the data in the direction, and move the cursor to the opposite
+        row to represent the cursor moving to the first row of the next page in
+        that direction"""
+        row_count = self.table.row_count
+
+        if scroll_request.direction == "up":
+            self.action_page_up()
+            self.table.move_cursor(row=row_count - 1, animate=False)
+
+        elif scroll_request.direction == "down":
+            self.action_page_down()
+            self.table.move_cursor(row=0, animate=False)
 
 
 def main() -> int:
