@@ -1,62 +1,66 @@
 from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import Callable
+from typing import Protocol
+
 import pandas as pd
 from rich.segment import Segment
 from rich.style import Style
-
-from textual.app import App, ComposeResult
+from textual.app import App
+from textual.app import ComposeResult
 from textual.containers import Container
-from textual.widgets import Header, Footer, DataTable
 from textual.reactive import reactive
-
-ROWS = [
-    ("lane", "swimmer", "country", "time"),
-    (4, "Joseph Schooling", "Singapore", 50.39),
-    (2, "Michael Phelps", "United States", 51.14),
-    (5, "Chad le Clos", "South Africa", 51.14),
-    (6, "László Cseh", "Hungary", 51.14),
-    (3, "Li Zhuhao", "China", 51.26),
-    (8, "Mehdy Metella", "France", 51.58),
-    (7, "Tom Shields", "United States", 51.73),
-    (1, "Aleksandr Sadovnikov", "Russia", 51.84),
-    (10, "Darren Burns", "Scotland", 51.84),
-]
-
-
-from typing import Callable
+from textual.widgets import DataTable
+from textual.widgets import Footer
+from textual.widgets import Header
 
 ERROR_RETURN_VALUE = 1
 
-READERS: dict[str, Callable] = {
+
+class DataPathReader(Protocol):
+    def __call__(self, path: Path) -> pd.DataFrame:
+        ...
+
+
+def ExcelReader(path: Path) -> pd.DataFrame:
+    return pd.read_excel(path)
+
+
+def CSVReader(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path)
+
+
+def ParquetReader(path: Path) -> pd.DataFrame:
+    return pd.read_parquet(path)
+
+
+READERS: dict[str, DataPathReader] = {
     # excel extensions
-    ".xlsx": pd.read_excel,
-    ".xls":pd.read_excel, 
-    ".xlsm":pd.read_excel, 
-    ".xlsb":pd.read_excel, 
+    ".xlsx": ExcelReader,
+    ".xls": ExcelReader,
+    ".xlsm": ExcelReader,
+    ".xlsb": ExcelReader,
     # csv extensions
-    ".csv": pd.read_csv,
-    ".tsv": pd.read_csv,
-    ".txt": pd.read_csv,
+    ".csv": CSVReader,
+    ".tsv": CSVReader,
+    ".txt": CSVReader,
     # parquet extensions
-    ".parquet": pd.read_parquet,
-    ".pqt": pd.read_parquet,
-    # pickle extensions
-    ".pickle": pd.read_pickle,
-    ".pkl": pd.read_pickle,
+    ".parquet": ParquetReader,
+    ".pqt": ParquetReader,
 }
 
-def get_reader_from_path(filepath: Path) -> Callable:
+
+def get_reader_from_path(filepath: Path) -> DataPathReader:
     return READERS[filepath.suffix.lower()]
 
 
-
-
 class PeekedData(DataTable):
-    def render_df(self, df: pd.DataFrame):
+    def render_df(self, df: pd.DataFrame) -> None:
         self.clear(columns=True)
 
-        self.add_columns('index', *df.columns.to_list())
+        self.add_columns("index", *df.columns.to_list())
         for row_data in df.itertuples(name=None):
             index = row_data[0]
             values = row_data[1:]
@@ -70,10 +74,9 @@ class PeekedData(DataTable):
 class DataViewport(Container):
     rows_in_view: int
 
-    def __init__(self, initial_rows: int, *args, **kwargs):
+    def __init__(self, initial_rows: int):
         self.rows_in_view = initial_rows
-        super().__init__(*args, **kwargs)
-
+        super().__init__()
 
     def compose(self) -> ComposeResult:
         yield PeekedData(header_height=1, zebra_stripes=True)
@@ -97,11 +100,11 @@ class Peek(App):
         ("ctrl+u", "page_up", "Page Up"),
     ]
 
-    def __init__(self, data: pd.DataFrame, filepath: Path | str, **kwargs):
+    def __init__(self, data: pd.DataFrame, filepath: Path | str):
         self.data = data
         self.filepath = str(filepath)
         self.TITLE = str(self.filepath)
-        super().__init__(**kwargs)
+        super().__init__()
 
     @property
     def table(self) -> PeekedData:
@@ -115,25 +118,30 @@ class Peek(App):
     def viewable(self) -> pd.DataFrame:
         """The viewable rows in the dataframe"""
         print(f"{self.data_viewport.size[1]=}")
-        return self.data.iloc[self.top_row : self.data_viewport.rows_in_view + self.top_row]
+        return self.data.iloc[
+            self.top_row : self.data_viewport.rows_in_view + self.top_row
+        ]
 
     def watch_top_row(self, _: int) -> None:
         self.table.render_df(self.viewable)
- 
+
     def compose(self) -> ComposeResult:
         yield Header()
         yield Footer()
-        yield DataViewport(initial_rows=self.size[1]-4)
- 
+        yield DataViewport(initial_rows=self.size[1] - 4)
+
     def on_mount(self) -> None:
         self.table.render_df(df=self.viewable)
 
-
     def action_page_down(self) -> None:
-        self.top_row = min(self.top_row + self.data_viewport.rows_in_view, len(self.data))
+        self.top_row = min(
+            self.top_row + self.data_viewport.rows_in_view,
+            len(self.data),
+        )
 
     def action_page_up(self) -> None:
         self.top_row = max(self.top_row - self.data_viewport.rows_in_view, 0)
+
 
 def main() -> int:
     try:
@@ -141,7 +149,6 @@ def main() -> int:
     except IndexError:
         print("requires a file")
         return ERROR_RETURN_VALUE
-
 
     if not filepath.exists():
         print(f"{filepath} doesn't exist")
@@ -152,7 +159,7 @@ def main() -> int:
     except KeyError:
         print(f"filetype not supported")
         return ERROR_RETURN_VALUE
- 
+
     print("loading data...")
     data = reader(filepath)
 
@@ -164,4 +171,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     exit(main())
-
