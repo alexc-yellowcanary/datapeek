@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
+from typing import Generator
 from typing import Protocol
 
 import pandas as pd
@@ -71,6 +73,24 @@ class PeekedData(DataTable):
         self.styles.height = "100%"
         self.styles.width = "100%"
 
+    @contextmanager
+    def preserve_cursor_scroll_coords(self) -> Generator[None, None, None]:
+        # save current coords
+        cursor_coords = self.cursor_coordinate
+        scroll_coords = self.scroll_offset
+
+        # enter context
+        yield
+
+        # recreate saved coords
+        self.move_cursor(
+            row=cursor_coords.row,
+            column=cursor_coords.column,
+            animate=False,
+        )
+
+        self.scroll_to(x=scroll_coords.x, y=scroll_coords.y, animate=False)
+
 
 class DataViewport(Container):
     rows_in_view: int
@@ -135,24 +155,16 @@ class Peek(App):
         self.table.render_df(df=self.viewable)
 
     def action_page_down(self) -> None:
-        prev_coords: Coordinate = self.table.cursor_coordinate
 
-        self.top_row = min(
-            self.top_row + self.data_viewport.rows_in_view,
-            len(self.data),
-        )
-
-        self.table.move_cursor(
-            row=prev_coords.row, column=prev_coords.column, animate=False,
-        )
+        with self.table.preserve_cursor_scroll_coords():
+            self.top_row = min(
+                self.top_row + self.data_viewport.rows_in_view,
+                len(self.data),
+            )
 
     def action_page_up(self) -> None:
-        prev_coords: Coordinate = self.table.cursor_coordinate
-
-        self.top_row = max(self.top_row - self.data_viewport.rows_in_view, 0)
-        self.table.move_cursor(
-            row=prev_coords.row, column=prev_coords.column, animate=False,
-        )
+        with self.table.preserve_cursor_scroll_coords():
+            self.top_row = max(self.top_row - self.data_viewport.rows_in_view, 0)
 
 
 def main() -> int:
